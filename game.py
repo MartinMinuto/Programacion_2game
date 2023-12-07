@@ -321,10 +321,6 @@ class Game:
 
                 # Renderización del mapa de tiles
                 self.tilemap.render(self.display, offset=render_scroll)
-                            
-
-                pygame.display.update()
-                self.clock.tick(60)
 
                 # ----------------------------------------------------JUGADOR------------------------------------------------#
 
@@ -394,7 +390,6 @@ class Game:
                         life.render(self.display, offset=render_scroll)
                         if self.player.rect().colliderect(life.rect()):
                             life.collect()
-                            self.show_coins += 1
                 self.life = [life for life in self.life if not life.collected]
                 # Muestra las vidas en la esquina superior derecha
                 self.display.blit(self.assets['life'], (287, 5))
@@ -480,6 +475,10 @@ class Game:
                         particle.pos[0] += math.sin(particle.animation.frame * 0.035) * 0.3
                     if kill:
                         self.particles.remove(particle)
+
+                    
+                pygame.display.update()
+                self.clock.tick(60)
 
 
     #----------------------------------------------------------------------GAME OVER-----------------------------------------------------------------------#

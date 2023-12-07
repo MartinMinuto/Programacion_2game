@@ -3,7 +3,7 @@ import json
 import pygame
 
 AUTOTILE_MAP = {
-    # Mapeo de combinaciones de vecinos para autotiles
+    # Mapeo de combinaciones para autotiles
     tuple(sorted([(1, 0), (0, 1)])): 0,
     tuple(sorted([(1, 0), (0, 1), (-1, 0)])): 1,
     tuple(sorted([(-1, 0), (0, 1)])): 2, 
@@ -28,7 +28,7 @@ class Tilemap:
         self.offgrid_tiles = []
         
     def extract(self, id_pairs, keep=False):
-        # Extrae y devuelve las coincidencias de tiles según pares de identificación
+        # Extrae y devuelve las coincidencias de tiles identificación
         matches = []
         for tile in self.offgrid_tiles.copy():
             if (tile['type'], tile['variant']) in id_pairs:
