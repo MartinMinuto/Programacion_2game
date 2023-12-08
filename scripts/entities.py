@@ -1,10 +1,6 @@
-import math
 import random
 
 import pygame
-
-from scripts.particle import Particle
-from scripts.spark import Spark
 
 class PhysicsEntity:
     def __init__(self, game, e_type, pos, size):
@@ -113,14 +109,10 @@ class Enemy(PhysicsEntity):
                         # Disparar proyectiles hacia la izquierda
                         self.game.sfx['shoot'].play()
                         self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
-                        for i in range(4):
-                            self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5 + math.pi, 2 + random.random()))
                     if (not self.flip and dis[0] > 0):
                         # Disparar proyectiles hacia la derecha
                         self.game.sfx['shoot'].play()
                         self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
-                        for i in range(4):
-                            self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5, 2 + random.random()))
         elif random.random() < 0.01:
             # Lógica para activar algo con probabilidad del 1%
             # Comienza a caminar aleatoriamente
@@ -137,22 +129,9 @@ class Enemy(PhysicsEntity):
         if abs(self.game.player.dashing) >= 50:
             # Verifica si la magnitud del "dash" del jugador es mayor o igual a 50
             if self.rect().colliderect(self.game.player.rect()):
-                # Verifica si los rectángulos de colisión del enemigo y el jugador se superponen
-
                 # Efecto de golpe y pantalla temblorosa
                 self.game.screenshake = max(16, self.game.screenshake)
                 self.game.sfx['hit'].play()
-
-                # Generación de chispas y partículas alrededor del enemigo golpeado
-                for i in range(30):
-                    angle = random.random() * math.pi * 2
-                    speed = random.random() * 5
-                    self.game.sparks.append(Spark(self.rect().center, angle, 2 + random.random()))
-                    self.game.particles.append(Particle(self.game, 'particle', self.rect().center, velocity=[math.cos(angle + math.pi) * speed * 0.5, math.sin(angle + math.pi) * speed * 0.5], frame=random.randint(0, 7)))
-
-                # Generación adicional de chispas en direcciones específicas
-                self.game.sparks.append(Spark(self.rect().center, 0, 5 + random.random()))
-                self.game.sparks.append(Spark(self.rect().center, math.pi, 5 + random.random()))
 
                 # Indica que la colisión ocurrió y se debería eliminar al enemigo
                 return True
@@ -160,13 +139,6 @@ class Enemy(PhysicsEntity):
     def hit(self):
         # Maneja el impacto del enemigo
         self.game.sfx['hit'].play()
-        for i in range(30):
-            angle = random.random() * math.pi * 2
-            speed = random.random() * 5
-            self.game.sparks.append(Spark(self.rect().center, angle, 2 + random.random()))
-            self.game.particles.append(Particle(self.game, 'particle', self.rect().center, velocity=[math.cos(angle + math.pi) * speed * 0.5, math.sin(angle + math.pi) * speed * 0.5], frame=random.randint(0, 7)))
-        self.game.sparks.append(Spark(self.rect().center, 0, 5 + random.random()))
-        self.game.sparks.append(Spark(self.rect().center, math.pi, 5 + random.random()))
         return True
             
     def render(self, surf, offset=(0, 0)):
@@ -177,6 +149,89 @@ class Enemy(PhysicsEntity):
             surf.blit(pygame.transform.flip(self.game.assets['gun'], True, False), (self.rect().centerx - 4 - self.game.assets['gun'].get_width() - offset[0], self.rect().centery - offset[1]))
         else:
             surf.blit(self.game.assets['gun'], (self.rect().centerx + 4 - offset[0], self.rect().centery - offset[1]))
+
+class Boss(PhysicsEntity):
+    def __init__(self, game, pos, size):
+        # Inicializa al jefe con su tipo, posición, tamaño y propiedades específicas
+        super().__init__(game, 'boss', pos, size)
+        self.jump_timer = 0
+        self.max_jump_timer = random.randint(60, 120)  # Tiempo máximo entre saltos
+        self.shoot_timer = 0
+        self.max_shoot_timer = random.randint(60, 120)  # Tiempo máximo entre disparos
+        self.set_action('idle')
+        self.projectiles = []
+        self.walking = 0
+
+    def move(self, dx, dy):
+    # Mueve al jefe solo horizontalmente (izquierda a derecha)
+        self.velocity[0] = dx
+        self.velocity[1] = 0  # Evita el movimiento vertical
+
+        # Aplica la velocidad y verifica las colisiones
+        PhysicsEntity.move(self, dx, dy)
+
+        # Si el jefe está en el borde de la plataforma, invierte la dirección
+        if self.collisions['right'] or self.collisions['left']:
+            self.velocity[0] = -self.velocity[0]
+            self.flip()
+
+    def update(self, tilemap, movement=(0, 0)):
+    # Actualiza al jefe, maneja comportamientos adicionales como saltar y disparar
+        super().update(tilemap, movement=movement)
+
+        # Mueve al jefe horizontalmente
+        self.pos[0] += movement[0]
+
+        # Maneja el salto del jefe
+        if self.jump_timer <= 0:
+            if random.random() < 0.01:
+                self.jump()
+                self.jump_timer = self.max_jump_timer
+        else:
+            self.jump_timer -= 1
+
+        # Maneja el disparo del jefe
+        if self.shoot_timer <= 0:
+            if random.random() < 0.01:
+                self.shoot()
+                self.shoot_timer = self.max_shoot_timer
+        else:
+            self.shoot_timer -= 1
+
+        if movement[0] != 0:
+            self.set_action('run')
+        else:
+            self.set_action('idle')
+
+        # Maneja la colisión con el jugador y crea efectos al impactar
+        if abs(self.game.player.dashing) >= 50:
+            # Verifica si la magnitud del "dash" del jugador es mayor o igual a 50
+            if self.rect().colliderect(self.game.player.rect()):
+                # Efecto de golpe y pantalla temblorosa
+                self.game.screenshake = max(16, self.game.screenshake)
+                self.game.sfx['hit'].play()
+
+                # Indica que la colisión ocurrió y se debería eliminar al enemigo
+                return True
+
+    def jump(self):
+        # Maneja el salto del jefe
+        if self.collisions['down']:
+            self.velocity[1] = -3.5
+            self.air_time = 5
+
+    def shoot(self):
+        # Maneja el disparo del jefe y dispara dos balas
+        dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
+        if abs(dis[1]) < 16:
+            self.game.sfx['shoot'].play()
+            self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
+            self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
+
+    def render(self, surf, offset=(0, 0)):
+        # Asegúrate de tener la animación del jefe configurada correctamente
+        super().render(surf, offset=offset)
+
 
 class Coin():
     def __init__(self, game, pos):
@@ -214,7 +269,7 @@ class Life():
 
     def rect(self):
         # Devuelve un objeto Rect que representa la posición y el tamaño de la moneda
-        return pygame.Rect(self.pos[0], self.pos[1], 20, 20)
+        return pygame.Rect(self.pos[0], self.pos[1], 16, 16)
     
     def collect(self):
         # Realiza acciones cuando la vida es recogida por el jugador
@@ -225,12 +280,38 @@ class Life():
 
     def render(self, surf, offset=(0, 0)):
         # Renderiza la vida en la pantalla
-        coin_rect = self.rect()
-        coin_rect.x -= offset[0]
-        coin_rect.y -= offset[1]
+        life_rect = self.rect()
+        life_rect.x -= offset[0]
+        life_rect.y -= offset[1]
 
         # Dibuja la imagen en lugar de un rectángulo
-        surf.blit(self.image, (coin_rect.x, coin_rect.y))
+        surf.blit(self.image, (life_rect.x, life_rect.y))
+
+class Spike():
+    def __init__(self, game, pos):
+        self.game = game
+        self.pos = pos
+        self.collected = False
+        self.image = self.game.assets['spike']
+
+    def rect(self):
+        # Devuelve un objeto Rect que representa la posición y el tamaño de la moneda
+        return pygame.Rect(self.pos[0], self.pos[1], 16, 16)
+    
+    def collect(self):
+        self.collected = True
+        self.game.player.lives -= 1
+        self.game.sfx['hit'].play(0)
+        self.game.sfx['hit'].set_volume(0.2)
+
+    def render(self, surf, offset=(0, 0)):
+        # Renderiza la moneda en la pantalla
+        spike_rect = self.rect()
+        spike_rect.x -= offset[0]
+        spike_rect.y -= offset[1]
+
+        # Dibuja la imagen en lugar de un rectángulo
+        surf.blit(self.image, (spike_rect.x, spike_rect.y))
                   
 class Player(PhysicsEntity):
     def __init__(self, game, pos, size):
@@ -279,12 +360,6 @@ class Player(PhysicsEntity):
                 self.set_action('idle')
         
         # Maneja el dash del jugador y crea efectos visuales
-        if abs(self.dashing) in {60, 50}:
-            for i in range(20):
-                angle = random.random() * math.pi * 2
-                speed = random.random() * 0.5 + 0.5
-                pvelocity = [math.cos(angle) * speed, math.sin(angle) * speed]
-                self.game.particles.append(Particle(self.game, 'particle', self.rect().center, velocity=pvelocity, frame=random.randint(0, 7)))
         if self.dashing > 0:
             self.dashing = max(0, self.dashing - 1)
         if self.dashing < 0:
@@ -293,8 +368,6 @@ class Player(PhysicsEntity):
             self.velocity[0] = abs(self.dashing) / self.dashing * 8
             if abs(self.dashing) == 51:
                 self.velocity[0] *= 0.1
-            pvelocity = [abs(self.dashing) / self.dashing * random.random() * 3, 0]
-            self.game.particles.append(Particle(self.game, 'particle', self.rect().center, velocity=pvelocity, frame=random.randint(0, 7)))
                 
         # Frena la velocidad en el eje X
         if self.velocity[0] > 0:
@@ -309,10 +382,7 @@ class Player(PhysicsEntity):
             projectile_pos = [self.rect().centerx + (8 if not self.flip else -8), self.rect().centery]
             projectile_speed = 2 if not self.flip else -2
             self.game.projectiles.append([projectile_pos, projectile_speed, 0])
-            for i in range(4):
-                angle = random.random() - 0.5
-                self.game.sparks.append(Spark(projectile_pos, angle, 2 + random.random()))
-    
+
     def render(self, surf, offset=(0, 0)):
         # Renderiza al jugador, excluyendo la renderización si está en mitad de un dash
         if abs(self.dashing) <= 50:

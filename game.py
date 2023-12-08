@@ -1,7 +1,9 @@
 import os
 import sys
-import math
 import random
+import sqlite3
+import random
+import string
 
 import pygame
 
@@ -9,11 +11,9 @@ from pygame.locals import *
 from scripts.btn import *
 from scripts.pause import *
 from scripts.utils import load_image, load_images, Animation
-from scripts.entities import PhysicsEntity, Player, Enemy, Coin, Life
+from scripts.entities import PhysicsEntity, Player, Enemy, Coin, Life, Boss, Spike
 from scripts.tilemap import Tilemap
 from scripts.clouds import Clouds
-from scripts.particle import Particle
-from scripts.spark import Spark
 
 class Game:
     def __init__(self):
@@ -43,6 +43,15 @@ class Game:
         self.GO = True
         self.game_over_active = False
         self.spawn_timer = 0
+
+        # Conexión a la base de datos (asegúrate de tener permisos para escribir en la ubicación del archivo)
+        self.conn = sqlite3.connect('boarscore.db')
+        self.c = self.conn.cursor()
+
+        # Crear tabla si no existe
+        self.c.execute('''CREATE TABLE IF NOT EXISTS boarscore
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, score INTEGER)''')
+        self.conn.commit()
         
         # Carga de imágenes y sonidos utilizados en el juego
         self.assets = {
@@ -56,18 +65,19 @@ class Game:
             'clouds': load_images('clouds'),
             'enemy/idle': Animation(load_images('entities/enemy/idle'), img_dur=6),
             'enemy/run': Animation(load_images('entities/enemy/run'), img_dur=4),
+            'boss/idle': Animation(load_images('entities/boss/idle'), img_dur=4),
+            'boss/run': Animation(load_images('entities/boss/run'), img_dur=6),
             'player/idle': Animation(load_images('entities/player/idle'), img_dur=6),
             'player/run': Animation(load_images('entities/player/run'), img_dur=4),
             'player/jump': Animation(load_images('entities/player/jump')),
             'player/slide': Animation(load_images('entities/player/slide')),
             'player/wall_slide': Animation(load_images('entities/player/wall_slide')),
-            'particle/leaf': Animation(load_images('particles/leaf'), img_dur=20, loop=False),
-            'particle/particle': Animation(load_images('particles/particle'), img_dur=6, loop=False),
             'gun': load_image('gun.png'),
             'projectile': load_image('projectile.png'),
             'coin' : load_image('coin.png'),
             'life' : load_image('Life.png'),
-            'face' : pygame.transform.scale(pygame.image.load('data/images/face.png'), (32,32))
+            'spike' : load_image('spike.png'),
+            'face' : pygame.transform.scale(pygame.image.load('data/images/face.png'), (32,32)),
         }
 
         # Configuración de efectos de sonido y música
@@ -106,6 +116,8 @@ class Game:
         # Variables para el efecto de pantalla temblorosa (screenshake)
         self.screenshake = 0
 
+        
+
      # ----------------------------------------------------------------------RESET DE NIVEL-------------------------------------------------------------------#
     def reset_game(self):
         self.menu_active = True
@@ -127,11 +139,6 @@ class Game:
 
         #Reloj
         self.start_time = pygame.time.get_ticks()
-        
-        # Identificación de posiciones para generación de partículas (hojas)
-        self.leaf_spawners = []
-        for tree in self.tilemap.extract([('large_decor', 2)], keep=True):
-            self.leaf_spawners.append(pygame.Rect(4 + tree['pos'][0], 4 + tree['pos'][1], 23, 13))
 
         # Creación de enemigos y posición inicial del jugador
         self.enemies = []
@@ -142,25 +149,33 @@ class Game:
             else:
                 self.enemies.append(Enemy(self, spawner['pos'], (8, 15)))
 
+        self.bosses = []
+        if spawner['variant'] == 4 and self.level == 2:
+            boss_instance = Boss(self, spawner['pos'], (40, 40))
+            self.bosses.append(boss_instance)
+
         # Creación de monedas
         self.coins = []
         for coin_spawn in self.tilemap.extract([('spawners', 2)]):
             self.coins.append(Coin(self, coin_spawn['pos']))
 
+        # Creación de vidas
         self.life = []
         for life_spawn in self.tilemap.extract([('spawners', 3)]):
             self.life.append(Life(self, life_spawn['pos']))
+
+        # Creación de trampa
+        self.spike = []
+        for spike_spawn in self.tilemap.extract([('spawners', 5)]):
+            self.spike.append(Spike(self, spike_spawn['pos']))
                     
-        # Inicialización de listas para proyectiles, partículas y chispas
+        # Inicialización de listas para proyectiles
         self.projectiles = []
-        self.particles = []
-        self.sparks = []
         
         # Posición de inicio y transición   
         self.scroll = [0, 0]
         self.dead = 0
         self.transition = -30
-
 
         # ------------------------------------------------ MENU-----------------------------------------------------------------#
 
@@ -341,10 +356,8 @@ class Game:
 
                     # Verifica colisiones con el mapa de tiles
                     if self.tilemap.solid_check(projectile[0]):
-                        # Elimina el proyectil y genera chispas
+                        # Elimina el proyectil
                         self.projectiles.remove(projectile)
-                        for i in range(4):
-                            self.sparks.append(Spark(projectile[0], random.random() - 0.5 + (math.pi if projectile[1] > 0 else 0), 2 + random.random()))
                     elif projectile[2] > 360:
                         # Elimina el proyectil si ha superado un tiempo máximo de vida
                         self.projectiles.remove(projectile)
@@ -376,7 +389,6 @@ class Game:
                     if self.dead >= 10:
                         self.transition = min(30, self.transition + 1)
                     if self.dead > 40:
-                        # Disminuir las vidas y reiniciar el nivel después de cierto tiempo tras la muerte
                         self.player.lives -= 1
                         if self.player.lives <= 0:
                             self.game_over_active = True  # Cambia el estado a Game Over
@@ -391,13 +403,13 @@ class Game:
                         if self.player.rect().colliderect(life.rect()):
                             life.collect()
                 self.life = [life for life in self.life if not life.collected]
-                # Muestra las vidas en la esquina superior derecha
+
                 self.display.blit(self.assets['life'], (287, 5))
                 lives_text = self.font.render(f'{self.player.lives}', True, (255, 255, 255))
                 self.display.blit(lives_text, (302,5))
 
                 #--------------------------------------------------MONEDAS----------------------------------------------#
-                # Actualización y renderzización de monedas
+
                 for coin in self.coins.copy():
                     if not coin.collected:
                         coin.render(self.display, offset=render_scroll)
@@ -409,6 +421,56 @@ class Game:
                 self.display.blit(self.assets['coin'], (280, 15))
                 lives_text = self.font.render(f'{self.show_coins}', True, (255, 255, 255))
                 self.display.blit(lives_text, (302,23))
+
+                #--------------------------------------------------TRAMPAS----------------------------------------------#
+
+                # Dentro del bucle para las trampas
+                for spike in self.spike.copy():
+                    if not spike.collected:
+                        spike.render(self.display, offset=render_scroll)
+                        if self.player.rect().colliderect(spike.rect()):
+                            spike.collect()
+
+                    if self.player.lives <= 0:
+                        self.dead += 1
+                        if self.dead >= 10:
+                            self.transition = min(30, self.transition + 2)
+                        if self.dead > 40:
+                            self.game_over_active = True
+
+                #-------------------------------------BOSS-------------------------------------------#
+
+                #for boss in self.bosses.copy():
+                 #   kill = boss.update(self.tilemap, (0, 0))
+                 #   boss.render(self.display, offset=render_scroll)
+                 #   if kill:
+                 #       self.player.score += 50
+                 #       self.bosses.remove(boss)
+
+                    # BALAS ENEMIGAS
+                    # Actualización y renderización de proyectiles del boss
+                #    if self.boss:
+                #        for projectile in self.boss.projectiles.copy():
+                #            projectile[0][0] += projectile[1]
+                #            projectile[2] += 1
+                #            img = self.assets['projectile']
+                #            self.display.blit(img, (projectile[0][0] - img.get_width() / 2 - render_scroll[0], projectile[0][1] - img.get_height() / 2 - render_scroll[1]))
+
+                            # Verifica colisiones con el mapa de tiles
+                #            if self.tilemap.solid_check(projectile[0]):
+                #                # Elimina el proyectil y genera chispas
+                #                self.boss.projectiles.remove(projectile)
+                #            elif projectile[2] > 360:
+                                # Elimina el proyectil si ha superado un tiempo máximo de vida
+                #                self.boss.projectiles.remove(projectile)
+                #            elif abs(self.player.dashing) < 50:
+                                # Verifica colisiones con el jugador
+                #                if self.player.rect().collidepoint(projectile[0]):
+                                    # Elimina el proyectil, reduce la vida del jugador y crea efectos visuales
+                #                    self.boss.projectiles.remove(projectile)
+                 #                   self.dead += 1
+                  #                  self.sfx['hit'].play()
+                  #                  self.screenshake = max(16, self.screenshake)
 
 
                 #-----------------------------------------------------ENEMIGOS------------------------------------------------------#
@@ -433,81 +495,103 @@ class Game:
                     if self.tilemap.solid_check(projectile[0]):
                         # Elimina el proyectil y genera chispas
                         self.projectiles.remove(projectile)
-                        for i in range(4):
-                            self.sparks.append(Spark(projectile[0], random.random() - 0.5 + (math.pi if projectile[1] > 0 else 0), 2 + random.random()))
                     elif projectile[2] > 360:
                         # Elimina el proyectil si ha superado un tiempo máximo de vida
                         self.projectiles.remove(projectile)
                     elif abs(self.player.dashing) < 50:
                         # Verifica colisiones con el jugador
                         if self.player.rect().collidepoint(projectile[0]):
-                            # Elimina el proyectil, reduce la vida del jugador y crea efectos visuales
+                            # Elimina el proyectil, reduce la vida del jugador
                             self.projectiles.remove(projectile)
                             self.dead += 1
                             self.sfx['hit'].play()
                             self.screenshake = max(16, self.screenshake)
-                            for i in range(30):
-                                angle = random.random() * math.pi * 2
-                                speed = random.random() * 5
-                                self.sparks.append(Spark(self.player.rect().center, angle, 2 + random.random()))
-                                self.particles.append(Particle(self, 'particle', self.player.rect().center, velocity=[math.cos(angle + math.pi) * speed * 0.5, math.sin(angle + math.pi) * speed * 0.5], frame=random.randint(0, 7)))
-
-                #--------------------------------------------------PARTICULAS---------------------------------------------------------------#
-
-                # Generación de partículas (hojas) en los spawners de árboles
-                for rect in self.leaf_spawners:
-                    if random.random() * 49999 < rect.width * rect.height:
-                        pos = (rect.x + random.random() * rect.width, rect.y + random.random() * rect.height)
-                        self.particles.append(Particle(self, 'leaf', pos, velocity=[-0.1, 0.3], frame=random.randint(0, 20)))
-
-                # Actualización y renderización de partículas
-                for spark in self.sparks.copy():
-                    kill = spark.update()
-                    spark.render(self.display, offset=render_scroll)
-                    if kill:
-                        self.sparks.remove(spark)
-                
-                # Actualización y renderización de partículas
-                for particle in self.particles.copy():
-                    kill = particle.update()
-                    particle.render(self.display, offset=render_scroll)
-                    if particle.type == 'leaf':
-                        particle.pos[0] += math.sin(particle.animation.frame * 0.035) * 0.3
-                    if kill:
-                        self.particles.remove(particle)
-
-                    
+        
                 pygame.display.update()
                 self.clock.tick(60)
-
-
+    
     #----------------------------------------------------------------------GAME OVER-----------------------------------------------------------------------#
 
     def game_over(self):
+        entering_name = True
+        player_name = ""
+
+        enter_name_font = pygame.font.Font(None, 36)
+        enter_name_text = enter_name_font.render("Enter your name:", True, (255, 255, 255))
+        name_input_rect = pygame.Rect(220, 150, 200, 50)
+        
         while self.GO:
             self.clock.tick(60)
-            # Botones
-            rect_restart = pygame.Rect(220, 100, SIZE_BUTTON[0], SIZE_BUTTON[1])
-            rect_leave = pygame.Rect(220, 350, SIZE_BUTTON[0], SIZE_BUTTON[1])
 
-            # Menu eventos
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    quit()
+            if entering_name:
+            # Procesar eventos para permitir la entrada de nombre
+                pygame.event.pump()
+                for e in pygame.event.get():
+                    if e.type == pygame.KEYDOWN:
+                        if e.key == pygame.K_RETURN:
+                            entering_name = False
+                        elif e.key == pygame.K_BACKSPACE:
+                            player_name = player_name[:-1]
+                        elif e.unicode.isalnum():
+                            player_name += e.unicode
 
-                if e.type == MOUSEBUTTONDOWN:
-                    if e.button == 1:
-                        if rect_restart.collidepoint(e.pos):
-                            self.reset_game() # Llama a la función de reinicio
-                        elif rect_leave.collidepoint(e.pos):
-                            pygame.quit()
-                            sys.exit()
+                self.screen.blit(enter_name_text, (220, 100))
+                pygame.draw.rect(self.screen, (255, 255, 255), name_input_rect, 2)
+                name_input_surface = self.menu_font.render(player_name, True, (255, 255, 255))
+                self.screen.blit(name_input_surface, (name_input_rect.x + 5, name_input_rect.y + 5))
 
-            # Boton Start y Leave
-            self.screen.blit(self.assets['gameOver'], (0, 0))
-            create_botton(self.screen, (150,100,250), rect_restart, text="Restart", font=self.menu_font)
-            create_botton(self.screen, (150,100,250), rect_leave, text="Leave", font=self.menu_font)
+                pygame.display.flip()
+            else:
+                # Botones
+                rect_restart = pygame.Rect(220, 100, SIZE_BUTTON[0], SIZE_BUTTON[1])
+                rect_leave = pygame.Rect(220, 350, SIZE_BUTTON[0], SIZE_BUTTON[1])
 
-            pygame.display.flip()
+                # Obtener el nombre del jugador
+                if not player_name:
+                    continue
+                player_score = self.player.score
+                existing_name = self.c.execute("SELECT name FROM boarscore WHERE name = ?", (player_name,)).fetchone()
+                self.c.execute("SELECT name, score FROM boarscore ORDER BY score DESC LIMIT 5")
+                top_scores = self.c.fetchall()
+
+                if not existing_name:
+                    try:
+                        # Insertar el puntaje en la base de datos
+                        self.c.execute("INSERT INTO boarscore (name, score) VALUES (?, ?)", (player_name, player_score))
+                        self.conn.commit()
+                    except Exception as e:
+                        print(f"Error al insertar puntaje en la base de datos: {e}")
+
+                # Menu eventos
+                for e in pygame.event.get():
+                    if e.type == pygame.QUIT:
+                        quit()
+
+                    if e.type == MOUSEBUTTONDOWN:
+                        if e.button == 1:
+                            if rect_restart.collidepoint(e.pos):
+                                self.reset_game() # Llama a la función de reinicio
+                            elif rect_leave.collidepoint(e.pos):
+                                pygame.quit()
+                                sys.exit()
+
+                # Boton Start y Leave
+                self.screen.blit(self.assets['gameOver'], (0, 0))
+                # Renderizar los puntajes en la pantalla (puedes ajustar esta parte según tu interfaz gráfica)
+                y_position = 200
+                for i, (name, score) in enumerate(top_scores):
+                    score_text = f"{i + 1}. {name}: {score}"
+                    text_render = self.font.render(score_text, True, (255, 255, 255))
+                    self.screen.blit(text_render, (220, y_position))
+                    y_position += 20
+                create_botton(self.screen, (150,100,250), rect_restart, text="Restart", font=self.menu_font)
+                create_botton(self.screen, (150,100,250), rect_leave, text="Leave", font=self.menu_font)
+
+                pygame.display.flip()
+
+    def __del__(self):
+        self.conn.close()
+
+
 
 Game().run()
