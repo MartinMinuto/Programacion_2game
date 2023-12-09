@@ -13,7 +13,6 @@ from scripts.pause import *
 from scripts.utils import load_image, load_images, Animation
 from scripts.entities import PhysicsEntity, Player, Enemy, Coin, Life, Boss, Spike
 from scripts.tilemap import Tilemap
-from scripts.clouds import Clouds
 
 class Game:
     def __init__(self):
@@ -62,7 +61,6 @@ class Game:
             'background': load_image('background.png'),
             'menu': load_image('menu.png'),
             'gameOver': load_image('game_over.png'),
-            'clouds': load_images('clouds'),
             'enemy/idle': Animation(load_images('entities/enemy/idle'), img_dur=6),
             'enemy/run': Animation(load_images('entities/enemy/run'), img_dur=4),
             'boss/idle': Animation(load_images('entities/boss/idle'), img_dur=4),
@@ -97,9 +95,6 @@ class Game:
         self.sfx['dash'].set_volume(0.3)
         self.sfx['jump'].set_volume(0.7)
         
-        # Configuración de las nubes en el fondo del juego
-        self.clouds = Clouds(self.assets['clouds'], count=16)
-        
         # Inicialización del jugador y el mapa
         self.player = Player(self, (50, 50), (8, 15))
         self.tilemap = Tilemap(self, tile_size=16)
@@ -115,8 +110,6 @@ class Game:
         
         # Variables para el efecto de pantalla temblorosa (screenshake)
         self.screenshake = 0
-
-        
 
      # ----------------------------------------------------------------------RESET DE NIVEL-------------------------------------------------------------------#
     def reset_game(self):
@@ -150,9 +143,8 @@ class Game:
                 self.enemies.append(Enemy(self, spawner['pos'], (8, 15)))
 
         self.bosses = []
-        if spawner['variant'] == 4 and self.level == 2:
-            boss_instance = Boss(self, spawner['pos'], (40, 40))
-            self.bosses.append(boss_instance)
+        for boss_spawn in self.tilemap.extract([('spawners', 4)]):
+            self.bosses.append(Boss(self, boss_spawn['pos'], (8, 32)))
 
         # Creación de monedas
         self.coins = []
@@ -326,11 +318,6 @@ class Game:
                 self.display.fill((0, 0, 0, 0))
                 self.display_2.blit(self.assets['background'], (0, 0))
 
-                #---------------------------------NUBES-----------------------------------#
-
-                # Actualización y renderización de nubes en el fondo
-                self.clouds.update()
-                self.clouds.render(self.display_2, offset=render_scroll)
                 
                 #-------------------------TERRENO------------------------------#
 
@@ -440,38 +427,37 @@ class Game:
 
                 #-------------------------------------BOSS-------------------------------------------#
 
-                #for boss in self.bosses.copy():
-                 #   kill = boss.update(self.tilemap, (0, 0))
-                 #   boss.render(self.display, offset=render_scroll)
-                 #   if kill:
-                 #       self.player.score += 50
-                 #       self.bosses.remove(boss)
+                # Renderizado del jefe
+                for boss in self.bosses.copy():
+                    boss.render(self.display, offset=render_scroll)
+                    kill = boss.update(self.tilemap, (0, 0))
+                    if kill:
+                        self.player.score += 300
+                        self.bosses.remove(boss)
 
-                    # BALAS ENEMIGAS
-                    # Actualización y renderización de proyectiles del boss
-                #    if self.boss:
-                #        for projectile in self.boss.projectiles.copy():
-                #            projectile[0][0] += projectile[1]
-                #            projectile[2] += 1
-                #            img = self.assets['projectile']
-                #            self.display.blit(img, (projectile[0][0] - img.get_width() / 2 - render_scroll[0], projectile[0][1] - img.get_height() / 2 - render_scroll[1]))
+                # BALAS BOSS
+                # Actualización y renderización de proyectiles del boss
+                for projectile in self.projectiles.copy():
+                    projectile[0][0] += projectile[1]
+                    projectile[2] += 1
+                    img = self.assets['projectile']
+                    self.display.blit(img, (projectile[0][0] - img.get_width() / 2 - render_scroll[0], projectile[0][1] - img.get_height() / 2 - render_scroll[1]))
 
-                            # Verifica colisiones con el mapa de tiles
-                #            if self.tilemap.solid_check(projectile[0]):
-                #                # Elimina el proyectil y genera chispas
-                #                self.boss.projectiles.remove(projectile)
-                #            elif projectile[2] > 360:
-                                # Elimina el proyectil si ha superado un tiempo máximo de vida
-                #                self.boss.projectiles.remove(projectile)
-                #            elif abs(self.player.dashing) < 50:
-                                # Verifica colisiones con el jugador
-                #                if self.player.rect().collidepoint(projectile[0]):
-                                    # Elimina el proyectil, reduce la vida del jugador y crea efectos visuales
-                #                    self.boss.projectiles.remove(projectile)
-                 #                   self.dead += 1
-                  #                  self.sfx['hit'].play()
-                  #                  self.screenshake = max(16, self.screenshake)
-
+                    # Verifica colisiones con el mapa de tiles
+                    if self.tilemap.solid_check(projectile[0]):
+                        # Elimina el proyectil y genera chispas
+                        self.projectiles.remove(projectile)
+                    elif projectile[2] > 360:
+                        # Elimina el proyectil si ha superado un tiempo máximo de vida
+                        self.projectiles.remove(projectile)
+                    elif abs(self.player.dashing) < 50:
+                        # Verifica colisiones con el jugador
+                        if self.player.rect().collidepoint(projectile[0]):
+                            # Elimina el proyectil, reduce la vida del jugador
+                            self.projectiles.remove(projectile)
+                            self.dead += 1
+                            self.sfx['hit'].play()
+                            self.screenshake = max(16, self.screenshake)
 
                 #-----------------------------------------------------ENEMIGOS------------------------------------------------------#
 
@@ -591,7 +577,5 @@ class Game:
 
     def __del__(self):
         self.conn.close()
-
-
 
 Game().run()

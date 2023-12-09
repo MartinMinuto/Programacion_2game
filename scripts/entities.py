@@ -125,7 +125,7 @@ class Enemy(PhysicsEntity):
         else:
             self.set_action('idle')
             
-        # Maneja la colisión con el jugador y crea efectos al impactar
+        # Maneja la colisión con el jugador
         if abs(self.game.player.dashing) >= 50:
             # Verifica si la magnitud del "dash" del jugador es mayor o igual a 50
             if self.rect().colliderect(self.game.player.rect()):
@@ -150,88 +150,71 @@ class Enemy(PhysicsEntity):
         else:
             surf.blit(self.game.assets['gun'], (self.rect().centerx + 4 - offset[0], self.rect().centery - offset[1]))
 
+
 class Boss(PhysicsEntity):
     def __init__(self, game, pos, size):
         # Inicializa al jefe con su tipo, posición, tamaño y propiedades específicas
         super().__init__(game, 'boss', pos, size)
-        self.jump_timer = 0
-        self.max_jump_timer = random.randint(60, 120)  # Tiempo máximo entre saltos
-        self.shoot_timer = 0
-        self.max_shoot_timer = random.randint(60, 120)  # Tiempo máximo entre disparos
-        self.set_action('idle')
-        self.projectiles = []
         self.walking = 0
-
-    def move(self, dx, dy):
-    # Mueve al jefe solo horizontalmente (izquierda a derecha)
-        self.velocity[0] = dx
-        self.velocity[1] = 0  # Evita el movimiento vertical
-
-        # Aplica la velocidad y verifica las colisiones
-        PhysicsEntity.move(self, dx, dy)
-
-        # Si el jefe está en el borde de la plataforma, invierte la dirección
-        if self.collisions['right'] or self.collisions['left']:
-            self.velocity[0] = -self.velocity[0]
-            self.flip()
-
+        
     def update(self, tilemap, movement=(0, 0)):
-    # Actualiza al jefe, maneja comportamientos adicionales como saltar y disparar
+    # Actualiza el enemigo, maneja su comportamiento y dispara proyectiles
+        if self.walking:
+            # Comportamiento al caminar
+            if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7), self.pos[1] + 100)):
+                if (self.collisions['right'] or self.collisions['left']):
+                    if not self.collisions['right'] and not self.collisions['left']:
+                        self.flip = not self.flip
+                else:
+                    movement = (movement[0] - 0.7 if self.flip else 0.7, movement[1])
+            else:
+                self.flip = not self.flip
+            self.walking = max(0, self.walking - 1)
+            if not self.walking:
+                # Disparar proyectiles cuando deja de caminar
+                dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
+                if (abs(dis[1]) < 16):
+                    if (self.flip and dis[0] < 0):
+                        # Disparar proyectiles hacia la izquierda
+                        self.game.sfx['shoot'].play()
+                        self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
+                        self.game.sfx['shoot'].play()
+                        self.game.projectiles.append([[self.rect().centerx - 9, self.rect().centery], -1.5, 0])
+                    elif (not self.flip and dis[0] > 0):
+                        # Disparar proyectiles hacia la derecha
+                        self.game.sfx['shoot'].play()
+                        self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
+                        self.game.sfx['shoot'].play()
+                        self.game.projectiles.append([[self.rect().centerx + 9, self.rect().centery], 1.5, 0])
+
+        elif random.random() < 0.01:
+            self.walking = random.randint(30, 120)
+        
         super().update(tilemap, movement=movement)
-
-        # Mueve al jefe horizontalmente
-        self.pos[0] += movement[0]
-
-        # Maneja el salto del jefe
-        if self.jump_timer <= 0:
-            if random.random() < 0.01:
-                self.jump()
-                self.jump_timer = self.max_jump_timer
-        else:
-            self.jump_timer -= 1
-
-        # Maneja el disparo del jefe
-        if self.shoot_timer <= 0:
-            if random.random() < 0.01:
-                self.shoot()
-                self.shoot_timer = self.max_shoot_timer
-        else:
-            self.shoot_timer -= 1
-
+        
         if movement[0] != 0:
             self.set_action('run')
         else:
             self.set_action('idle')
-
-        # Maneja la colisión con el jugador y crea efectos al impactar
+            
+        # Maneja la colisión con el jugador
         if abs(self.game.player.dashing) >= 50:
             # Verifica si la magnitud del "dash" del jugador es mayor o igual a 50
             if self.rect().colliderect(self.game.player.rect()):
                 # Efecto de golpe y pantalla temblorosa
                 self.game.screenshake = max(16, self.game.screenshake)
                 self.game.sfx['hit'].play()
-
                 # Indica que la colisión ocurrió y se debería eliminar al enemigo
                 return True
 
-    def jump(self):
-        # Maneja el salto del jefe
-        if self.collisions['down']:
-            self.velocity[1] = -3.5
-            self.air_time = 5
-
-    def shoot(self):
-        # Maneja el disparo del jefe y dispara dos balas
-        dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
-        if abs(dis[1]) < 16:
-            self.game.sfx['shoot'].play()
-            self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
-            self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
+    def hit(self):
+        # Maneja el impacto del enemigo
+        self.game.sfx['hit'].play()
+        return True
 
     def render(self, surf, offset=(0, 0)):
-        # Asegúrate de tener la animación del jefe configurada correctamente
+        # Renderiza al enemigo
         super().render(surf, offset=offset)
-
 
 class Coin():
     def __init__(self, game, pos):
