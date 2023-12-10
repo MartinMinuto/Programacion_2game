@@ -2,8 +2,6 @@ import os
 import sys
 import random
 import sqlite3
-import random
-import string
 
 import pygame
 
@@ -63,8 +61,9 @@ class Game:
             'gameOver': load_image('game_over.png'),
             'enemy/idle': Animation(load_images('entities/enemy/idle'), img_dur=6),
             'enemy/run': Animation(load_images('entities/enemy/run'), img_dur=4),
-            'boss/idle': Animation(load_images('entities/boss/idle'), img_dur=4),
-            'boss/run': Animation(load_images('entities/boss/run'), img_dur=6),
+            'boss/idle': Animation(load_images('entities/boss/idle'), img_dur=6),
+            'boss/run': Animation(load_images('entities/boss/run'), img_dur=8),
+            'boss/jump': Animation(load_images('entities/boss/run')),
             'player/idle': Animation(load_images('entities/player/idle'), img_dur=6),
             'player/run': Animation(load_images('entities/player/run'), img_dur=4),
             'player/jump': Animation(load_images('entities/player/jump')),
@@ -142,9 +141,10 @@ class Game:
             else:
                 self.enemies.append(Enemy(self, spawner['pos'], (8, 15)))
 
+        # Creación de jefe
         self.bosses = []
         for boss_spawn in self.tilemap.extract([('spawners', 4)]):
-            self.bosses.append(Boss(self, boss_spawn['pos'], (8, 32)))
+            self.bosses.append(Boss(self, boss_spawn['pos'], (8, 15)))
 
         # Creación de monedas
         self.coins = []
@@ -235,7 +235,6 @@ class Game:
     def run(self):
         # Reproducción de sonido de ambiente
         #self.sfx['ambience'].play(-1)
-
         while True:
             # Activacion de pantalla fin de juego
             if self.game_over_active:
@@ -355,8 +354,6 @@ class Game:
                                 # Elimina el proyectil y reduce la vida del enemigo
                                 self.projectiles.remove(projectile)
                                 if enemy.hit():
-                                    # Aumenta la puntuación del jugador y elimina al enemigo
-                                    self.player.score += 50
                                     self.enemies.remove(enemy)
                                 break
                 
@@ -417,24 +414,23 @@ class Game:
                         spike.render(self.display, offset=render_scroll)
                         if self.player.rect().colliderect(spike.rect()):
                             spike.collect()
-
                     if self.player.lives <= 0:
                         self.dead += 1
-                        if self.dead >= 10:
-                            self.transition = min(30, self.transition + 2)
-                        if self.dead > 40:
-                            self.game_over_active = True
 
                 #-------------------------------------BOSS-------------------------------------------#
 
                 # Renderizado del jefe
+                bosses_to_remove = []
                 for boss in self.bosses.copy():
                     boss.render(self.display, offset=render_scroll)
                     kill = boss.update(self.tilemap, (0, 0))
                     if kill:
-                        self.player.score += 300
+                        bosses_to_remove.append(boss)
+                
+                for boss in bosses_to_remove:
+                    if boss in self.bosses:
                         self.bosses.remove(boss)
-
+                        
                 # BALAS BOSS
                 # Actualización y renderización de proyectiles del boss
                 for projectile in self.projectiles.copy():
@@ -466,7 +462,6 @@ class Game:
                     kill = enemy.update(self.tilemap, (0, 0))
                     enemy.render(self.display, offset=render_scroll)
                     if kill:
-                        self.player.score += 50
                         self.enemies.remove(enemy)
 
                 # BALAS ENEMIGAS

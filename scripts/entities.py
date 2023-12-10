@@ -1,5 +1,4 @@
 import random
-
 import pygame
 
 class PhysicsEntity:
@@ -114,7 +113,6 @@ class Enemy(PhysicsEntity):
                         self.game.sfx['shoot'].play()
                         self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
         elif random.random() < 0.01:
-            # Lógica para activar algo con probabilidad del 1%
             # Comienza a caminar aleatoriamente
             self.walking = random.randint(30, 120)
         
@@ -132,13 +130,13 @@ class Enemy(PhysicsEntity):
                 # Efecto de golpe y pantalla temblorosa
                 self.game.screenshake = max(16, self.game.screenshake)
                 self.game.sfx['hit'].play()
-
-                # Indica que la colisión ocurrió y se debería eliminar al enemigo
+                self.game.player.score += 50
                 return True
             
     def hit(self):
         # Maneja el impacto del enemigo
         self.game.sfx['hit'].play()
+        self.game.player.score += 50
         return True
             
     def render(self, surf, offset=(0, 0)):
@@ -153,15 +151,19 @@ class Enemy(PhysicsEntity):
 
 class Boss(PhysicsEntity):
     def __init__(self, game, pos, size):
-        # Inicializa al jefe con su tipo, posición, tamaño y propiedades específicas
         super().__init__(game, 'boss', pos, size)
         self.walking = 0
-        
+        self.jump_timer = 0
+        self.lives = 3
+
     def update(self, tilemap, movement=(0, 0)):
-    # Actualiza el enemigo, maneja su comportamiento y dispara proyectiles
+        if self.lives <= 0:
+            self.game.game_over()
+            return True
+        # Actualiza el enemigo, maneja su comportamiento y dispara proyectiles
         if self.walking:
             # Comportamiento al caminar
-            if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7), self.pos[1] + 100)):
+            if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7), self.pos[1] + 23)):
                 if (self.collisions['right'] or self.collisions['left']):
                     if not self.collisions['right'] and not self.collisions['left']:
                         self.flip = not self.flip
@@ -172,24 +174,26 @@ class Boss(PhysicsEntity):
             self.walking = max(0, self.walking - 1)
             if not self.walking:
                 # Disparar proyectiles cuando deja de caminar
-                dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
-                if (abs(dis[1]) < 16):
-                    if (self.flip and dis[0] < 0):
-                        # Disparar proyectiles hacia la izquierda
-                        self.game.sfx['shoot'].play()
-                        self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
-                        self.game.sfx['shoot'].play()
-                        self.game.projectiles.append([[self.rect().centerx - 9, self.rect().centery], -1.5, 0])
-                    elif (not self.flip and dis[0] > 0):
-                        # Disparar proyectiles hacia la derecha
-                        self.game.sfx['shoot'].play()
-                        self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
-                        self.game.sfx['shoot'].play()
-                        self.game.projectiles.append([[self.rect().centerx + 9, self.rect().centery], 1.5, 0])
-
+                if random.random() < 1:
+                    dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
+                    if abs(dis[1]) < 16:
+                        if (self.flip and dis[0] < 0):
+                            # Disparar proyectil hacia la izquierda
+                            self.game.sfx['shoot'].play()
+                            self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
+                            # Disparar segundo proyectil con una pequeña diferencia en la posición x
+                            self.game.sfx['shoot'].play()
+                            self.game.projectiles.append([[self.rect().centerx - 60, self.rect().centery], -1.5, 0])
+                        elif (not self.flip and dis[0] > 0):
+                            # Disparar proyectil hacia la derecha
+                            self.game.sfx['shoot'].play()
+                            self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
+                            # Disparar segundo proyectil con una pequeña diferencia en la posición x
+                            self.game.sfx['shoot'].play()
+                            self.game.projectiles.append([[self.rect().centerx + 60, self.rect().centery], 1.5, 0])
         elif random.random() < 0.01:
             self.walking = random.randint(30, 120)
-        
+
         super().update(tilemap, movement=movement)
         
         if movement[0] != 0:
@@ -197,19 +201,27 @@ class Boss(PhysicsEntity):
         else:
             self.set_action('idle')
             
+        # Restar vidas si hay colisión con las balas
+        for projectile in self.game.projectiles:
+            if self.rect().colliderect(pygame.Rect(projectile[0][0], projectile[0][1], 1, 1)):
+                self.lives -= 1
+                self.hit()
+                projectile[0][1] = -100  # Mover la bala fuera de la pantalla
+                self.game.projectiles.remove(projectile)
+
         # Maneja la colisión con el jugador
         if abs(self.game.player.dashing) >= 50:
-            # Verifica si la magnitud del "dash" del jugador es mayor o igual a 50
             if self.rect().colliderect(self.game.player.rect()):
-                # Efecto de golpe y pantalla temblorosa
                 self.game.screenshake = max(16, self.game.screenshake)
                 self.game.sfx['hit'].play()
-                # Indica que la colisión ocurrió y se debería eliminar al enemigo
+                self.lives -= 1
+                self.game.player.score += 50
                 return True
 
     def hit(self):
         # Maneja el impacto del enemigo
         self.game.sfx['hit'].play()
+        self.game.player.score += 100
         return True
 
     def render(self, surf, offset=(0, 0)):
@@ -342,7 +354,7 @@ class Player(PhysicsEntity):
             else:
                 self.set_action('idle')
         
-        # Maneja el dash del jugador y crea efectos visuales
+        # Maneja el dash del jugador
         if self.dashing > 0:
             self.dashing = max(0, self.dashing - 1)
         if self.dashing < 0:
