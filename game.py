@@ -313,11 +313,10 @@ class Game:
                 self.screen.blit(pygame.transform.scale(self.display_2, self.screen.get_size()), screenshake_offset)
 
                 #----------------------PANTALLA------------------------------#
-                # Limpieza y preparación de la pantalla de juego
+
                 self.display.fill((0, 0, 0, 0))
                 self.display_2.blit(self.assets['background'], (0, 0))
 
-                
                 #-------------------------TERRENO------------------------------#
 
                 # Renderización del mapa de tiles
@@ -351,7 +350,6 @@ class Game:
                         # Verifica colisiones con los enemigos
                         for enemy in self.enemies.copy():
                             if enemy.rect().colliderect(pygame.Rect(projectile[0][0] - 4, projectile[0][1] - 4, 8, 8)):
-                                # Elimina el proyectil y reduce la vida del enemigo
                                 self.projectiles.remove(projectile)
                                 if enemy.hit():
                                     self.enemies.remove(enemy)

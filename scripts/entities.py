@@ -10,12 +10,10 @@ class PhysicsEntity:
         self.size = size
         self.velocity = [0, 0]
         self.collisions = {'up': False, 'down': False, 'right': False, 'left': False}
-        
         self.action = ''
         self.anim_offset = (-3, -3)
         self.flip = False
         self.set_action('idle')
-        
         self.last_movement = [0, 0]
     
     def rect(self):
@@ -129,7 +127,6 @@ class Enemy(PhysicsEntity):
             if self.rect().colliderect(self.game.player.rect()):
                 # Efecto de golpe y pantalla temblorosa
                 self.game.screenshake = max(16, self.game.screenshake)
-                self.game.sfx['hit'].play()
                 self.game.player.score += 50
                 return True
             
@@ -160,7 +157,6 @@ class Boss(PhysicsEntity):
         if self.lives <= 0:
             self.game.game_over()
             return True
-        # Actualiza el enemigo, maneja su comportamiento y dispara proyectiles
         if self.walking:
             # Comportamiento al caminar
             if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7), self.pos[1] + 23)):
@@ -173,22 +169,17 @@ class Boss(PhysicsEntity):
                 self.flip = not self.flip
             self.walking = max(0, self.walking - 1)
             if not self.walking:
-                # Disparar proyectiles cuando deja de caminar
                 if random.random() < 1:
                     dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
                     if abs(dis[1]) < 16:
                         if (self.flip and dis[0] < 0):
-                            # Disparar proyectil hacia la izquierda
                             self.game.sfx['shoot'].play()
                             self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0])
-                            # Disparar segundo proyectil con una pequeña diferencia en la posición x
                             self.game.sfx['shoot'].play()
                             self.game.projectiles.append([[self.rect().centerx - 60, self.rect().centery], -1.5, 0])
                         elif (not self.flip and dis[0] > 0):
-                            # Disparar proyectil hacia la derecha
                             self.game.sfx['shoot'].play()
                             self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0])
-                            # Disparar segundo proyectil con una pequeña diferencia en la posición x
                             self.game.sfx['shoot'].play()
                             self.game.projectiles.append([[self.rect().centerx + 60, self.rect().centery], 1.5, 0])
         elif random.random() < 0.01:
@@ -206,17 +197,8 @@ class Boss(PhysicsEntity):
             if self.rect().colliderect(pygame.Rect(projectile[0][0], projectile[0][1], 1, 1)):
                 self.lives -= 1
                 self.hit()
-                projectile[0][1] = -100  # Mover la bala fuera de la pantalla
+                projectile[0][1] = -100
                 self.game.projectiles.remove(projectile)
-
-        # Maneja la colisión con el jugador
-        if abs(self.game.player.dashing) >= 50:
-            if self.rect().colliderect(self.game.player.rect()):
-                self.game.screenshake = max(16, self.game.screenshake)
-                self.game.sfx['hit'].play()
-                self.lives -= 1
-                self.game.player.score += 50
-                return True
 
     def hit(self):
         # Maneja el impacto del enemigo
@@ -297,7 +279,7 @@ class Spike():
         self.collected = True
         self.game.player.lives -= 1
         self.game.sfx['hit'].play(0)
-        self.game.sfx['hit'].set_volume(0.2)
+        self.game.sfx['hit'].set_volume(0.4)
 
     def render(self, surf, offset=(0, 0)):
         # Renderiza la moneda en la pantalla
@@ -379,7 +361,7 @@ class Player(PhysicsEntity):
             self.game.projectiles.append([projectile_pos, projectile_speed, 0])
 
     def render(self, surf, offset=(0, 0)):
-        # Renderiza al jugador, excluyendo la renderización si está en mitad de un dash
+        # Renderiza al jugador
         if abs(self.dashing) <= 50:
             super().render(surf, offset=offset)
             

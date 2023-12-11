@@ -4,7 +4,7 @@ import pygame
 BASE_IMG_PATH = 'data/images/'
 
 def load_image(path):
-    # Carga una imagen desde la ruta especificada y aplica transparencia (colorkey)
+    # Carga una imagen desde la ruta especificada y aplica transparencia
     img = pygame.image.load(BASE_IMG_PATH + path).convert()
     img.set_colorkey((0, 0, 0))
     return img
