@@ -125,8 +125,6 @@ class Enemy(PhysicsEntity):
         if abs(self.game.player.dashing) >= 50:
             # Verifica si la magnitud del "dash" del jugador es mayor o igual a 50
             if self.rect().colliderect(self.game.player.rect()):
-                # Efecto de golpe y pantalla temblorosa
-                self.game.screenshake = max(16, self.game.screenshake)
                 self.game.player.score += 50
                 return True
             
@@ -309,8 +307,6 @@ class Player(PhysicsEntity):
         
         # Maneja la cuenta de tiempo en el aire y la muerte del jugador
         if self.air_time > 120:
-            if not self.game.dead:
-                self.game.screenshake = max(16, self.game.screenshake)
             self.game.dead += 1
         
         if self.collisions['down']:
@@ -388,7 +384,7 @@ class Player(PhysicsEntity):
             return True
     
     def dash(self):
-        # Maneja el dash del jugador y reproduce el sonido correspondiente
+        # Manejo del dash del jugador
         if not self.dashing:
             self.game.sfx['dash'].play()
             if self.flip:

@@ -290,9 +290,6 @@ class Game:
                 self.scroll[1] += (self.player.rect().centery - self.display.get_height() / 2 - self.scroll[1]) / 30
                 render_scroll = (int(self.scroll[0]), int(self.scroll[1]))
 
-                # Actualización del efecto de pantalla temblorosa
-                self.screenshake = max(0, self.screenshake - 1)
-
                 # Creación de una máscara de la pantalla para efecto de transición    
                 display_mask = pygame.mask.from_surface(self.display)
                 display_sillhouette = display_mask.to_surface(setcolor=(0, 0, 0, 180), unsetcolor=(0, 0, 0, 0))
@@ -451,7 +448,6 @@ class Game:
                             self.projectiles.remove(projectile)
                             self.dead += 1
                             self.sfx['hit'].play()
-                            self.screenshake = max(16, self.screenshake)
 
                 #-----------------------------------------------------ENEMIGOS------------------------------------------------------#
 
@@ -472,19 +468,15 @@ class Game:
 
                     # Verifica colisiones con el mapa de tiles
                     if self.tilemap.solid_check(projectile[0]):
-                        # Elimina el proyectil y genera chispas
                         self.projectiles.remove(projectile)
                     elif projectile[2] > 360:
-                        # Elimina el proyectil si ha superado un tiempo máximo de vida
                         self.projectiles.remove(projectile)
                     elif abs(self.player.dashing) < 50:
-                        # Verifica colisiones con el jugador
                         if self.player.rect().collidepoint(projectile[0]):
                             # Elimina el proyectil, reduce la vida del jugador
                             self.projectiles.remove(projectile)
                             self.dead += 1
                             self.sfx['hit'].play()
-                            self.screenshake = max(16, self.screenshake)
         
                 pygame.display.update()
                 self.clock.tick(60)
